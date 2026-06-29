@@ -71,11 +71,11 @@ export function getStatusConfig(status: string) {
 
 export function getTeamTotals(recruiters: Recruiter[], settings: TeamSettings) {
   const n = recruiters.length || 1;
-  const juneStartsTD  = recruiters.reduce((s, r) => s + r.juneStartsTD, 0);
-  const mayTotal      = recruiters.reduce((s, r) => s + r.mayStarts, 0);
-  const aprilTotal    = recruiters.reduce((s, r) => s + r.aprilStarts, 0);
-  const avgJuneQuality = recruiters.reduce((s, r) => s + r.juneQuality, 0) / n;
-  const avgMayQuality  = recruiters.reduce((s, r) => s + r.mayQuality, 0) / n;
+  const juneStartsTD   = recruiters.reduce((s, r) => s + r.juneStartsTD, 0);
+  const mayTotal       = recruiters.reduce((s, r) => s + r.mayStarts, 0);
+  const aprilTotal     = recruiters.reduce((s, r) => s + r.aprilStarts, 0);
+  const avgJuneQuality  = recruiters.reduce((s, r) => s + r.juneQuality, 0) / n;
+  const avgMayQuality   = recruiters.reduce((s, r) => s + r.mayQuality, 0) / n;
   const avgAprilQuality = recruiters.reduce((s, r) => s + r.aprilQuality, 0) / n;
 
   const projectedEOM = settings.currentDay > 0
@@ -90,17 +90,37 @@ export function getTeamTotals(recruiters: Recruiter[], settings: TeamSettings) {
   const aprToMayGrowth = aprilTotal > 0 ? ((mayTotal - aprilTotal) / aprilTotal) * 100 : 0;
   const mayToJuneProj  = mayTotal > 0   ? ((projectedEOM - mayTotal) / mayTotal) * 100 : 0;
 
+  // Team-level payout totals
+  const aprilPayout = recruiters.reduce((s, r) => s + getActualPayout(r.aprilStarts, r.aprilQuality), 0);
+  const mayPayout   = recruiters.reduce((s, r) => s + getActualPayout(r.mayStarts,   r.mayQuality),   0);
+  const juneEst     = recruiters.reduce((s, r) => s + getProjectedPayout(
+    getProjectedEOM(r.juneStartsTD, settings.currentDay, settings.totalDays),
+    r.juneQuality
+  ), 0);
+
   return {
+    // Primary names
     juneStartsTD, mayTotal, aprilTotal,
     projectedEOM, daysRemaining, startsNeededPerRecruiter,
-    avgJuneQuality: Math.round(avgJuneQuality * 10) / 10,
-    avgMayQuality:  Math.round(avgMayQuality * 10) / 10,
+    avgJuneQuality:  Math.round(avgJuneQuality  * 10) / 10,
+    avgMayQuality:   Math.round(avgMayQuality   * 10) / 10,
     avgAprilQuality: Math.round(avgAprilQuality * 10) / 10,
-    paceAbove: projectedEOM >= settings.teamTarget,
+    paceAbove:     projectedEOM >= settings.teamTarget,
     gapFromTarget: Math.abs(settings.teamTarget - projectedEOM),
     aprToMayGrowth: Math.round(aprToMayGrowth * 10) / 10,
-    mayToJuneProj:  Math.round(mayToJuneProj * 10) / 10,
-    avgStartsTD: Math.round((juneStartsTD / n) * 10) / 10,
+    mayToJuneProj:  Math.round(mayToJuneProj  * 10) / 10,
+    avgStartsTD:    Math.round((juneStartsTD / n) * 10) / 10,
+    aprilPayout, mayPayout, juneEst,
+
+    // Aliases used by various tab components
+    juneProjected:          projectedEOM,          // daily-insights-tab
+    totalStarts:            juneStartsTD,           // any legacy ref
+    avgQuality:             Math.round(avgJuneQuality * 10) / 10,
+    startsNeededToday:      startsNeededPerRecruiter,
+    aprilStarts:            aprilTotal,             // team-performance totals row
+    mayStarts:              mayTotal,               // team-performance totals row
+    juneTD:                 juneStartsTD,           // team-performance totals row
+    juneProj:               projectedEOM,           // team-performance totals row
   };
 }
 
@@ -120,11 +140,11 @@ export function getDirectorIncentive(data: TeamData) {
   const avgStartsPay  = cgrPayouts.reduce((s, r) => s + r.startsPay, 0) / n;
   const avgQualityPay = cgrPayouts.reduce((s, r) => s + r.qualityPay, 0) / n;
 
-  const startsAttainment  = avgStartsPay  / 800;   // CGR starts target payout = $800
-  const qualityAttainment = avgQualityPay / 200;   // CGR quality target payout = $200
+  const startsAttainment  = avgStartsPay  / 800;
+  const qualityAttainment = avgQualityPay / 200;
 
-  const startsPayout  = Math.round(startsAttainment  * 1050); // Dir starts target = $1,050
-  const qualityPayout = Math.round(qualityAttainment * 450);  // Dir quality target = $450
+  const startsPayout  = Math.round(startsAttainment  * 1050);
+  const qualityPayout = Math.round(qualityAttainment * 450);
 
   return {
     startsPayout, qualityPayout,
