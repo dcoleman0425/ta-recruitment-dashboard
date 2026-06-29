@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
+*.node
+.agent-browser/
+dulzs-hub/
+out/
+build/
+dist/
+.DS_Store
+*.log
