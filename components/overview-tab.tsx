@@ -1,8 +1,9 @@
 "use client";
 import { TeamData } from "@/lib/types";
-import { getTeamTotals, getDirectorIncentive, getActualPayout, getQualityBonus } from "@/lib/calculations";
+import { getMonthEntry, monthLabel } from "@/lib/months";
+import { getTeamTotals, getDirectorIncentive, getQualityBonus } from "@/lib/calculations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, AlertTriangle, Users, Star } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, AlertTriangle } from "lucide-react";
 
 interface Props { data: TeamData; }
 
@@ -20,18 +21,18 @@ export function OverviewTab({ data }: Props) {
   const { settings, recruiters } = data;
   const totals = getTeamTotals(recruiters, settings);
   const dir = getDirectorIncentive(data);
-  const n = recruiters.length;
+  const n = recruiters.length || 1;
 
-  // Director May payout (historical — use actual starts & quality)
-  const mayDirCGRPayouts = recruiters.map(r => ({
-    startsPay: r.mayStarts * 25,
-    qualityPay: getQualityBonus(r.mayQuality),
-  }));
-  const mayAvgStartsPay  = mayDirCGRPayouts.reduce((s,r) => s + r.startsPay, 0) / n;
-  const mayAvgQualityPay = mayDirCGRPayouts.reduce((s,r) => s + r.qualityPay, 0) / n;
-  const mayDirTotal = Math.round((mayAvgStartsPay/800)*1050) + Math.round((mayAvgQualityPay/200)*450);
+  // Director prior-month payout (historical — use actual starts & quality)
+  const prevDirCGRPayouts = recruiters.map(r => {
+    const e = getMonthEntry(r.months, totals.prevKey);
+    return { startsPay: e.starts * 25, qualityPay: getQualityBonus(e.quality) };
+  });
+  const prevAvgStartsPay  = prevDirCGRPayouts.reduce((s, r) => s + r.startsPay, 0) / n;
+  const prevAvgQualityPay = prevDirCGRPayouts.reduce((s, r) => s + r.qualityPay, 0) / n;
+  const prevDirTotal = Math.round((prevAvgStartsPay / 800) * 1050) + Math.round((prevAvgQualityPay / 200) * 450);
 
-  const projPct = Math.round((totals.projectedEOM / settings.teamTarget) * 100);
+  const projPct = settings.teamTarget > 0 ? Math.round((totals.projectedEOM / settings.teamTarget) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -43,9 +44,9 @@ export function OverviewTab({ data }: Props) {
             <div className="flex items-center gap-4">
               <DollarSign className="h-12 w-12 opacity-60" />
               <div>
-                <p className="text-sm font-medium opacity-75 uppercase tracking-wide">Your Director Bonus (June Projected)</p>
+                <p className="text-sm font-medium opacity-75 uppercase tracking-wide">Your Director Bonus ({monthLabel(totals.curKey)} Projected)</p>
                 <p className="text-5xl font-extrabold">${dir.total.toLocaleString()}</p>
-                <p className="text-xs opacity-60 mt-1">Target: $1,500 · Uncapped · May earned: ${mayDirTotal.toLocaleString()}</p>
+                <p className="text-xs opacity-60 mt-1">Target: $1,500 · Uncapped · {monthLabel(totals.prevKey)} earned: ${prevDirTotal.toLocaleString()}</p>
               </div>
             </div>
             <div className="flex gap-8 text-sm">
@@ -70,7 +71,7 @@ export function OverviewTab({ data }: Props) {
               <p className="font-semibold opacity-90">→ Quality rollup jumps to $450</p>
             </div>
             <div>
-              <p className="opacity-60">Team hits 100% of June target</p>
+              <p className="opacity-60">Team hits 100% of {monthLabel(totals.curKey)} target</p>
               <p className="font-semibold opacity-90">→ Starts rollup hits $1,050</p>
             </div>
             <div>
@@ -89,10 +90,10 @@ export function OverviewTab({ data }: Props) {
               <AlertTriangle className={`h-6 w-6 ${totals.paceAbove ? "text-emerald-500" : "text-red-500"}`} />
               <div>
                 <p className="font-bold text-slate-800 text-lg">
-                  {totals.paceAbove ? "✅ Pacing ABOVE June Target!" : `🔴 Pacing BELOW June Target by ${totals.gapFromTarget} starts`}
+                  {totals.paceAbove ? `✅ Pacing ABOVE ${monthLabel(totals.curKey)} Target!` : `🔴 Pacing BELOW ${monthLabel(totals.curKey)} Target by ${totals.gapFromTarget} starts`}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Projected EOM: <strong>{totals.projectedEOM}</strong> vs target <strong>{settings.teamTarget}</strong> · Day {settings.currentDay} of {settings.totalDays} · {totals.daysRemaining} days left
+                  Projected EOM: <strong>{totals.projectedEOM}</strong> vs target <strong>{settings.teamTarget}</strong> · Day {settings.currentDay} of {totals.curTotalDays} · {totals.daysRemaining} days left
                 </p>
               </div>
             </div>
@@ -106,76 +107,76 @@ export function OverviewTab({ data }: Props) {
 
       {/* ── Month-over-Month Summaries ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* April */}
+        {/* Two months back (final) */}
         <Card className="border-t-4 border-t-slate-400">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground uppercase tracking-wide">April 2026 (Final)</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground uppercase tracking-wide">{monthLabel(totals.prev2Key)} (Final)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-end">
               <div>
                 <p className="text-xs text-muted-foreground">Total Starts</p>
-                <p className="text-4xl font-bold text-slate-700">{totals.aprilTotal}</p>
+                <p className="text-4xl font-bold text-slate-700">{totals.prev2Total}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Avg Quality</p>
-                <p className="text-2xl font-bold text-slate-600">{totals.avgAprilQuality}%</p>
+                <p className="text-2xl font-bold text-slate-600">{totals.avgPrev2Quality}%</p>
               </div>
             </div>
             <div className="pt-2 border-t text-xs text-muted-foreground">
-              <p>Avg {Math.round(totals.aprilTotal / n * 10)/10} starts/recruiter</p>
-              <p>{recruiters.filter(r => r.aprilQuality >= 80).length}/{n} recruiters hit 80% quality</p>
+              <p>Avg {Math.round(totals.prev2Total / n * 10) / 10} starts/recruiter</p>
+              <p>{recruiters.filter(r => getMonthEntry(r.months, totals.prev2Key).quality >= 80).length}/{n} recruiters hit 80% quality</p>
             </div>
           </CardContent>
         </Card>
 
-        {/* May */}
+        {/* Prior month (final) */}
         <Card className="border-t-4 border-t-blue-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-blue-600 uppercase tracking-wide flex items-center gap-2">
-              May 2026 (Final) <TrendBadge pct={totals.aprToMayGrowth} />
+              {monthLabel(totals.prevKey)} (Final) <TrendBadge pct={totals.prev2ToPrevGrowth} />
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-end">
               <div>
                 <p className="text-xs text-muted-foreground">Total Starts</p>
-                <p className="text-4xl font-bold text-blue-700">{totals.mayTotal}</p>
+                <p className="text-4xl font-bold text-blue-700">{totals.prevTotal}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Avg Quality</p>
-                <p className="text-2xl font-bold text-blue-600">{totals.avgMayQuality}%</p>
+                <p className="text-2xl font-bold text-blue-600">{totals.avgPrevQuality}%</p>
               </div>
             </div>
             <div className="pt-2 border-t text-xs text-muted-foreground">
-              <p>Avg {Math.round(totals.mayTotal / n * 10)/10} starts/recruiter</p>
-              <p>{recruiters.filter(r => r.mayQuality >= 80).length}/{n} recruiters hit 80% quality</p>
+              <p>Avg {Math.round(totals.prevTotal / n * 10) / 10} starts/recruiter</p>
+              <p>{recruiters.filter(r => getMonthEntry(r.months, totals.prevKey).quality >= 80).length}/{n} recruiters hit 80% quality</p>
             </div>
           </CardContent>
         </Card>
 
-        {/* June */}
+        {/* Current month (in progress) */}
         <Card className="border-t-4 border-t-indigo-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-indigo-600 uppercase tracking-wide flex items-center gap-2">
-              June 2026 (In Progress) <TrendBadge pct={totals.mayToJuneProj} />
+              {monthLabel(totals.curKey)} (In Progress) <TrendBadge pct={totals.prevToCurProj} />
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-end">
               <div>
                 <p className="text-xs text-muted-foreground">Starts TD / Proj.</p>
-                <p className="text-4xl font-bold text-indigo-700">{totals.juneStartsTD}<span className="text-xl text-muted-foreground font-normal"> / {totals.projectedEOM}</span></p>
+                <p className="text-4xl font-bold text-indigo-700">{totals.curStartsTD}<span className="text-xl text-muted-foreground font-normal"> / {totals.projectedEOM}</span></p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Avg Quality</p>
-                <p className={`text-2xl font-bold ${totals.avgJuneQuality >= 80 ? "text-emerald-600" : "text-red-600"}`}>
-                  {totals.avgJuneQuality}%
+                <p className={`text-2xl font-bold ${totals.avgCurQuality >= 80 ? "text-emerald-600" : "text-red-600"}`}>
+                  {totals.avgCurQuality}%
                 </p>
               </div>
             </div>
             <div className="pt-2 border-t text-xs text-muted-foreground">
-              <p>Day {settings.currentDay} of {settings.totalDays} · {totals.daysRemaining} days left</p>
+              <p>Day {settings.currentDay} of {totals.curTotalDays} · {totals.daysRemaining} days left</p>
               <p>Need ~{totals.startsNeededPerRecruiter}/recruiter/day to hit target</p>
             </div>
           </CardContent>
@@ -185,10 +186,10 @@ export function OverviewTab({ data }: Props) {
       {/* ── Quick Stats Row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Crushing It 🚀",  value: recruiters.filter(r => { const p = Math.round((r.juneStartsTD/settings.currentDay)*settings.totalDays); return p >= r.juneTarget; }).length, sub: "pacing ahead", color: "text-emerald-600" },
-          { label: "Need a Push 🔴", value: recruiters.filter(r => { const p = Math.round((r.juneStartsTD/settings.currentDay)*settings.totalDays); return p < r.juneTarget * 0.8; }).length, sub: "at risk / behind", color: "text-red-600" },
-          { label: "Quality ≥80% ✅",  value: recruiters.filter(r => r.juneQuality >= 80).length, sub: "earn quality bonus", color: "text-purple-600" },
-          { label: "Quality <75% 🚨",  value: recruiters.filter(r => r.juneQuality < 75).length, sub: "zero quality bonus", color: "text-red-600" },
+          { label: "Crushing It 🚀",  value: recruiters.filter(r => { const e = getMonthEntry(r.months, totals.curKey); const p = settings.currentDay > 0 ? Math.round((e.starts/settings.currentDay)*totals.curTotalDays) : 0; return p >= e.target; }).length, sub: "pacing ahead", color: "text-emerald-600" },
+          { label: "Need a Push 🔴", value: recruiters.filter(r => { const e = getMonthEntry(r.months, totals.curKey); const p = settings.currentDay > 0 ? Math.round((e.starts/settings.currentDay)*totals.curTotalDays) : 0; return p < e.target * 0.8; }).length, sub: "at risk / behind", color: "text-red-600" },
+          { label: "Quality ≥80% ✅",  value: recruiters.filter(r => getMonthEntry(r.months, totals.curKey).quality >= 80).length, sub: "earn quality bonus", color: "text-purple-600" },
+          { label: "Quality <75% 🚨",  value: recruiters.filter(r => getMonthEntry(r.months, totals.curKey).quality < 75).length, sub: "zero quality bonus", color: "text-red-600" },
         ].map(s => (
           <Card key={s.label} className="text-center">
             <CardContent className="pt-4 pb-3">
