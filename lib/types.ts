@@ -1,23 +1,26 @@
+export interface MonthEntry {
+  starts: number;   // starts to date (or final starts once month is closed out)
+  quality: number;  // hire quality % (5th shift in 30 days)
+  target: number;   // this recruiter's starts commitment for that month
+}
+
 export interface Recruiter {
   id: string;
   name: string;
-  // June commitment
-  juneTarget: number;
-  // Historical actuals (completed months)
-  aprilStarts: number;
-  aprilQuality: number; // %
-  mayStarts: number;
-  mayQuality: number;   // %
-  // June current — updated daily via Upload Stats
-  juneStartsTD: number;
-  juneQuality: number;  // % hire quality (5th shift in 30 days)
+  // Map of month key ("YYYY-MM") -> that month's data for this recruiter
+  months: Record<string, MonthEntry>;
+}
+
+export interface MonthMeta {
+  key: string;       // "2026-07"
+  totalDays: number; // business/calendar days in that month used for pacing
 }
 
 export interface TeamSettings {
-  year: number;
-  totalDays: number;   // 30 for June
-  teamTarget: number;  // 260
-  currentDay: number;
+  months: MonthMeta[];      // all tracked months, oldest -> newest
+  currentMonthKey: string;  // key of the month currently in progress
+  currentDay: number;       // day-of-month counter for the current month
+  teamTarget: number;       // team starts target for the current month
 }
 
 export interface TeamData {
