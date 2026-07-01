@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { TeamData, Recruiter } from "@/lib/types";
+import { TeamData } from "@/lib/types";
+import { getMonthEntry, monthLabel } from "@/lib/months";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +13,14 @@ interface Props {
 }
 
 export function UploadStatsTab({ data, onUpdate }: Props) {
+  const curKey = data.settings.currentMonthKey;
   const [currentDay, setCurrentDay] = useState(data.settings.currentDay);
   const [stats, setStats] = useState<Record<string, { starts: number; quality: number }>>(
     Object.fromEntries(
-      data.recruiters.map(r => [r.id, { starts: r.juneStartsTD, quality: r.juneQuality }])
+      data.recruiters.map(r => {
+        const e = getMonthEntry(r.months, curKey);
+        return [r.id, { starts: e.starts, quality: e.quality }];
+      })
     )
   );
   const [saved, setSaved] = useState(false);
@@ -32,11 +37,20 @@ export function UploadStatsTab({ data, onUpdate }: Props) {
     const updated: TeamData = {
       ...data,
       settings: { ...data.settings, currentDay },
-      recruiters: data.recruiters.map(r => ({
-        ...r,
-        juneStartsTD: stats[r.id]?.starts ?? r.juneStartsTD,
-        juneQuality: stats[r.id]?.quality ?? r.juneQuality,
-      })),
+      recruiters: data.recruiters.map(r => {
+        const e = getMonthEntry(r.months, curKey);
+        return {
+          ...r,
+          months: {
+            ...r.months,
+            [curKey]: {
+              ...e,
+              starts: stats[r.id]?.starts ?? e.starts,
+              quality: stats[r.id]?.quality ?? e.quality,
+            },
+          },
+        };
+      }),
       lastUpdated: new Date().toISOString(),
     };
     saveData(updated);
@@ -78,8 +92,8 @@ export function UploadStatsTab({ data, onUpdate }: Props) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">📥 Enter Today's MTD Numbers</CardTitle>
-          <p className="text-xs text-muted-foreground">Update each recruiter's June starts and hire quality. Data saves in your browser.</p>
+          <CardTitle className="text-sm">📥 Enter Today's MTD Numbers — {monthLabel(curKey)}</CardTitle>
+          <p className="text-xs text-muted-foreground">Update each recruiter's {monthLabel(curKey)} starts and hire quality. Data saves in your browser.</p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -87,7 +101,7 @@ export function UploadStatsTab({ data, onUpdate }: Props) {
               <thead>
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-2 pr-4 font-medium text-slate-600">Recruiter</th>
-                  <th className="text-center py-2 px-3 font-medium text-slate-600">June Starts MTD</th>
+                  <th className="text-center py-2 px-3 font-medium text-slate-600">{monthLabel(curKey)} Starts MTD</th>
                   <th className="text-center py-2 px-3 font-medium text-slate-600">Hire Quality %</th>
                   <th className="text-center py-2 px-3 font-medium text-slate-600">Quality Band</th>
                 </tr>
