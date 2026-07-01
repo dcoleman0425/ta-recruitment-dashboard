@@ -2,10 +2,11 @@
 import { useState, useEffect } from "react";
 import { TeamData } from "@/lib/types";
 import { loadData } from "@/lib/store";
+import { monthLabel } from "@/lib/months";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewTab } from "@/components/overview-tab";
 import { TeamPerformanceTab } from "@/components/team-performance-tab";
-import { JuneTrackerTab } from "@/components/june-tracker-tab";
+import { MonthTrackerTab } from "@/components/month-tracker-tab";
 import { ChartsTab } from "@/components/charts-tab";
 import { DailyInsightsTab } from "@/components/daily-insights-tab";
 import { UploadStatsTab } from "@/components/upload-stats-tab";
@@ -29,6 +30,9 @@ export default function Home() {
     );
   }
 
+  const curKey = data.settings.currentMonthKey;
+  const curTotalDays = data.settings.months.find(m => m.key === curKey)?.totalDays ?? data.settings.currentDay;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
       {/* Header */}
@@ -39,12 +43,12 @@ export default function Home() {
               🏥 TA Recruitment Dashboard
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              TheKey — June 2026 · Last updated: {new Date(data.lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              TheKey — {monthLabel(curKey)} · Last updated: {new Date(data.lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500">
             <span className="bg-indigo-100 text-indigo-700 font-medium px-3 py-1 rounded-full">
-              Day {data.settings.currentDay} of {data.settings.totalDays}
+              Day {data.settings.currentDay} of {curTotalDays}
             </span>
             <span className="bg-slate-100 px-3 py-1 rounded-full">
               {data.recruiters.length} Recruiters
@@ -60,7 +64,7 @@ export default function Home() {
             {[
               { value: "overview",     label: "🏠 Overview" },
               { value: "team",         label: "👥 Team Performance" },
-              { value: "tracker",      label: "📅 June Tracker" },
+              { value: "tracker",      label: `📅 ${monthLabel(curKey)} Tracker` },
               { value: "charts",       label: "📈 Charts" },
               { value: "insights",     label: "⚡ Daily Insights" },
               { value: "upload",       label: "⬆️ Upload Stats" },
@@ -85,7 +89,7 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="tracker">
-            <JuneTrackerTab data={data} />
+            <MonthTrackerTab data={data} />
           </TabsContent>
 
           <TabsContent value="charts">
