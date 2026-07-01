@@ -1,4 +1,5 @@
 import { Recruiter, TeamSettings, TeamData } from "./types";
+import { getMonthEntry, prevMonthKey, daysInMonth } from "./months";
 
 // ── Recruiter payout (official TheKey 2026 plan) ───────────────────────────
 // $25 × CG 1st shifts + tiered quality bonus (uncapped)
@@ -67,60 +68,63 @@ export function getStatusConfig(status: string) {
   return map[status] ?? map["on-track"];
 }
 
-// ── Team totals ────────────────────────────────────────────────────────────
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+// ── Team totals (generalized around whichever month is "current") ─────────
 
 export function getTeamTotals(recruiters: Recruiter[], settings: TeamSettings) {
   const n = recruiters.length || 1;
-  const juneStartsTD   = recruiters.reduce((s, r) => s + r.juneStartsTD, 0);
-  const mayTotal       = recruiters.reduce((s, r) => s + r.mayStarts, 0);
-  const aprilTotal     = recruiters.reduce((s, r) => s + r.aprilStarts, 0);
-  const avgJuneQuality  = recruiters.reduce((s, r) => s + r.juneQuality, 0) / n;
-  const avgMayQuality   = recruiters.reduce((s, r) => s + r.mayQuality, 0) / n;
-  const avgAprilQuality = recruiters.reduce((s, r) => s + r.aprilQuality, 0) / n;
+  const curKey   = settings.currentMonthKey;
+  const prevKey  = prevMonthKey(curKey);
+  const prev2Key = prevMonthKey(prevKey);
+  const curTotalDays = settings.months.find(m => m.key === curKey)?.totalDays ?? daysInMonth(curKey);
+
+  const curStartsTD = recruiters.reduce((s, r) => s + getMonthEntry(r.months, curKey).starts, 0);
+  const prevTotal    = recruiters.reduce((s, r) => s + getMonthEntry(r.months, prevKey).starts, 0);
+  const prev2Total   = recruiters.reduce((s, r) => s + getMonthEntry(r.months, prev2Key).starts, 0);
+
+  const avgCurQuality   = recruiters.reduce((s, r) => s + getMonthEntry(r.months, curKey).quality, 0) / n;
+  const avgPrevQuality  = recruiters.reduce((s, r) => s + getMonthEntry(r.months, prevKey).quality, 0) / n;
+  const avgPrev2Quality = recruiters.reduce((s, r) => s + getMonthEntry(r.months, prev2Key).quality, 0) / n;
 
   const projectedEOM = settings.currentDay > 0
-    ? Math.round((juneStartsTD / settings.currentDay) * settings.totalDays)
+    ? Math.round((curStartsTD / settings.currentDay) * curTotalDays)
     : 0;
 
-  const daysRemaining = settings.totalDays - settings.currentDay;
+  const daysRemaining = curTotalDays - settings.currentDay;
   const startsNeededPerRecruiter = daysRemaining > 0
-    ? Math.max(1, Math.ceil((settings.teamTarget - juneStartsTD) / n / daysRemaining))
+    ? Math.max(1, Math.ceil((settings.teamTarget - curStartsTD) / n / daysRemaining))
     : 0;
 
-  const aprToMayGrowth = aprilTotal > 0 ? ((mayTotal - aprilTotal) / aprilTotal) * 100 : 0;
-  const mayToJuneProj  = mayTotal > 0   ? ((projectedEOM - mayTotal) / mayTotal) * 100 : 0;
+  const prev2ToPrevGrowth = prev2Total > 0 ? ((prevTotal - prev2Total) / prev2Total) * 100 : 0;
+  const prevToCurProj     = prevTotal > 0  ? ((projectedEOM - prevTotal) / prevTotal) * 100 : 0;
 
-  // Team-level payout totals
-  const aprilPayout = recruiters.reduce((s, r) => s + getActualPayout(r.aprilStarts, r.aprilQuality), 0);
-  const mayPayout   = recruiters.reduce((s, r) => s + getActualPayout(r.mayStarts,   r.mayQuality),   0);
-  const juneEst     = recruiters.reduce((s, r) => s + getProjectedPayout(
-    getProjectedEOM(r.juneStartsTD, settings.currentDay, settings.totalDays),
-    r.juneQuality
-  ), 0);
+  const prev2Payout = recruiters.reduce((s, r) => {
+    const e = getMonthEntry(r.months, prev2Key);
+    return s + getActualPayout(e.starts, e.quality);
+  }, 0);
+  const prevPayout = recruiters.reduce((s, r) => {
+    const e = getMonthEntry(r.months, prevKey);
+    return s + getActualPayout(e.starts, e.quality);
+  }, 0);
+  const curEst = recruiters.reduce((s, r) => {
+    const e = getMonthEntry(r.months, curKey);
+    return s + getProjectedPayout(getProjectedEOM(e.starts, settings.currentDay, curTotalDays), e.quality);
+  }, 0);
 
   return {
-    // Primary names
-    juneStartsTD, mayTotal, aprilTotal,
+    curKey, prevKey, prev2Key, curTotalDays,
+    curStartsTD, prevTotal, prev2Total,
     projectedEOM, daysRemaining, startsNeededPerRecruiter,
-    avgJuneQuality:  Math.round(avgJuneQuality  * 10) / 10,
-    avgMayQuality:   Math.round(avgMayQuality   * 10) / 10,
-    avgAprilQuality: Math.round(avgAprilQuality * 10) / 10,
+    avgCurQuality:   round1(avgCurQuality),
+    avgPrevQuality:  round1(avgPrevQuality),
+    avgPrev2Quality: round1(avgPrev2Quality),
     paceAbove:     projectedEOM >= settings.teamTarget,
     gapFromTarget: Math.abs(settings.teamTarget - projectedEOM),
-    aprToMayGrowth: Math.round(aprToMayGrowth * 10) / 10,
-    mayToJuneProj:  Math.round(mayToJuneProj  * 10) / 10,
-    avgStartsTD:    Math.round((juneStartsTD / n) * 10) / 10,
-    aprilPayout, mayPayout, juneEst,
-
-    // Aliases used by various tab components
-    juneProjected:          projectedEOM,          // daily-insights-tab
-    totalStarts:            juneStartsTD,           // any legacy ref
-    avgQuality:             Math.round(avgJuneQuality * 10) / 10,
-    startsNeededToday:      startsNeededPerRecruiter,
-    aprilStarts:            aprilTotal,             // team-performance totals row
-    mayStarts:              mayTotal,               // team-performance totals row
-    juneTD:                 juneStartsTD,           // team-performance totals row
-    juneProj:               projectedEOM,           // team-performance totals row
+    prev2ToPrevGrowth: round1(prev2ToPrevGrowth),
+    prevToCurProj:     round1(prevToCurProj),
+    avgStartsTD:       round1(curStartsTD / n),
+    prev2Payout, prevPayout, curEst,
   };
 }
 
@@ -131,10 +135,13 @@ export function getTeamTotals(recruiters: Recruiter[], settings: TeamSettings) {
 export function getDirectorIncentive(data: TeamData) {
   const { recruiters, settings } = data;
   const n = recruiters.length || 1;
+  const curKey = settings.currentMonthKey;
+  const curTotalDays = settings.months.find(m => m.key === curKey)?.totalDays ?? daysInMonth(curKey);
 
   const cgrPayouts = recruiters.map((r) => {
-    const proj = getProjectedEOM(r.juneStartsTD, settings.currentDay, settings.totalDays);
-    return { startsPay: proj * 25, qualityPay: getQualityBonus(r.juneQuality) };
+    const e = getMonthEntry(r.months, curKey);
+    const proj = getProjectedEOM(e.starts, settings.currentDay, curTotalDays);
+    return { startsPay: proj * 25, qualityPay: getQualityBonus(e.quality) };
   });
 
   const avgStartsPay  = cgrPayouts.reduce((s, r) => s + r.startsPay, 0) / n;
@@ -154,16 +161,4 @@ export function getDirectorIncentive(data: TeamData) {
     avgCGRStartsPay:  Math.round(avgStartsPay),
     avgCGRQualityPay: Math.round(avgQualityPay),
   };
-}
-
-// ── Misc helpers ───────────────────────────────────────────────────────────
-
-export function getPrevMonthName(m: string): string {
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const i = months.indexOf(m);
-  return i > 0 ? months[i - 1] : months[11];
-}
-
-export function getMonthIndex(m: string): number {
-  return ["January","February","March","April","May","June","July","August","September","October","November","December"].indexOf(m);
 }
