@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { TeamData } from "@/lib/types";
-import { getTeamTotals, getProjectedEOM, getQualityBonus, getStatus, getStatusConfig } from "@/lib/calculations";
+import { getMonthEntry, monthLabel } from "@/lib/months";
+import { getTeamTotals, getProjectedEOM, getStatus, getStatusConfig } from "@/lib/calculations";
 import { generateReport } from "@/lib/report";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ interface Props { data: TeamData; }
 export function DailyInsightsTab({ data }: Props) {
   const [copied, setCopied] = useState(false);
   const { settings, recruiters } = data;
+  const curKey = settings.currentMonthKey;
   const totals = getTeamTotals(recruiters, settings);
 
   const report = generateReport(data);
@@ -22,22 +24,22 @@ export function DailyInsightsTab({ data }: Props) {
   };
 
   // Shoutout picks: top 2 by starts, top 1 by quality
-  const byStarts = [...recruiters].sort((a,b) => b.juneStartsTD - a.juneStartsTD);
-  const byQuality = [...recruiters].sort((a,b) => b.juneQuality - a.juneQuality);
+  const byStarts = [...recruiters].sort((a, b) => getMonthEntry(b.months, curKey).starts - getMonthEntry(a.months, curKey).starts);
+  const byQuality = [...recruiters].sort((a, b) => getMonthEntry(b.months, curKey).quality - getMonthEntry(a.months, curKey).quality);
 
   // Needs push: behind/at-risk
   const needsPush = recruiters
-    .map(r => ({
-      ...r,
-      proj: getProjectedEOM(r.juneStartsTD, settings.currentDay, settings.totalDays),
-    }))
+    .map(r => {
+      const e = getMonthEntry(r.months, curKey);
+      return { ...r, entry: e, proj: getProjectedEOM(e.starts, settings.currentDay, totals.curTotalDays) };
+    })
     .filter(r => {
-      const st = getStatus(r.proj, r.juneTarget);
+      const st = getStatus(r.proj, r.entry.target);
       return st === "behind" || st === "at-risk";
     });
 
   // Quality warriors: ≥ 85%
-  const qualityWarriors = recruiters.filter(r => r.juneQuality >= 85);
+  const qualityWarriors = recruiters.filter(r => getMonthEntry(r.months, curKey).quality >= 85);
 
   return (
     <div className="space-y-5">
@@ -45,16 +47,14 @@ export function DailyInsightsTab({ data }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-indigo-50 border-indigo-200">
           <CardContent className="pt-4 pb-3">
-            <div className="text-2xl font-bold text-indigo-700">{totals.juneStartsTD}</div>
+            <div className="text-2xl font-bold text-indigo-700">{totals.curStartsTD}</div>
             <div className="text-xs text-indigo-600 font-medium">Starts MTD (Day {settings.currentDay})</div>
-            <div className="text-xs text-slate-500 mt-1">Projecting {totals.juneProjected} EOM</div>
+            <div className="text-xs text-slate-500 mt-1">Projecting {totals.projectedEOM} EOM</div>
           </CardContent>
         </Card>
         <Card className="bg-purple-50 border-purple-200">
           <CardContent className="pt-4 pb-3">
-            <div className="text-2xl font-bold text-purple-700">
-              {(recruiters.reduce((s,r) => s + r.juneQuality, 0) / recruiters.length).toFixed(1)}%
-            </div>
+            <div className="text-2xl font-bold text-purple-700">{totals.avgCurQuality}%</div>
             <div className="text-xs text-purple-600 font-medium">Avg Hire Quality</div>
             <div className="text-xs text-slate-500 mt-1">Target: ≥ 80%</div>
           </CardContent>
@@ -79,11 +79,11 @@ export function DailyInsightsTab({ data }: Props) {
           <CardContent className="space-y-2 text-sm">
             <div>
               <span className="font-semibold">🚀 Top Starts:</span>{" "}
-              {byStarts.slice(0,2).map(r => `${r.name.split(" ")[0]} (${r.juneStartsTD})`).join(" · ")}
+              {byStarts.slice(0, 2).map(r => `${r.name.split(" ")[0]} (${getMonthEntry(r.months, curKey).starts})`).join(" · ")}
             </div>
             <div>
               <span className="font-semibold">🎯 Top Quality:</span>{" "}
-              {byQuality[0]?.name.split(" ")[0]} ({byQuality[0]?.juneQuality}%)
+              {byQuality[0]?.name.split(" ")[0]} ({getMonthEntry(byQuality[0]?.months ?? {}, curKey).quality}%)
             </div>
           </CardContent>
         </Card>
@@ -97,13 +97,13 @@ export function DailyInsightsTab({ data }: Props) {
               ? <span className="text-green-600 font-medium">Everyone is on track! 🎉</span>
               : <ul className="space-y-1">
                   {needsPush.map(r => {
-                    const sc = getStatusConfig(getStatus(r.proj, r.juneTarget));
+                    const sc = getStatusConfig(getStatus(r.proj, r.entry.target));
                     return (
                       <li key={r.id} className="flex items-center gap-2">
                         <span>{sc.emoji}</span>
                         <span className="font-medium">{r.name.split(" ")[0]}</span>
                         <span className="text-slate-500">
-                          {r.juneStartsTD} starts → proj {r.proj} vs target {r.juneTarget}
+                          {r.entry.starts} starts → proj {r.proj} vs target {r.entry.target}
                         </span>
                       </li>
                     );
