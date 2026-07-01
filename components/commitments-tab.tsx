@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { TeamData } from "@/lib/types";
 import { saveData } from "@/lib/store";
+import { getMonthEntry, monthLabel, nextMonthKey, startNextMonth } from "@/lib/months";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,20 +13,25 @@ interface Props {
 }
 
 export function CommitmentsTab({ data, onUpdate }: Props) {
+  const curKey = data.settings.currentMonthKey;
   const [targets, setTargets] = useState<Record<string, number>>(
-    Object.fromEntries(data.recruiters.map(r => [r.id, r.juneTarget]))
+    Object.fromEntries(data.recruiters.map(r => [r.id, getMonthEntry(r.months, curKey).target]))
   );
   const [teamTarget, setTeamTarget] = useState(data.settings.teamTarget);
   const [saved, setSaved] = useState(false);
+  const [monthStarted, setMonthStarted] = useState(false);
 
   const handleSave = () => {
     const updated: TeamData = {
       ...data,
       settings: { ...data.settings, teamTarget },
-      recruiters: data.recruiters.map(r => ({
-        ...r,
-        juneTarget: targets[r.id] ?? r.juneTarget,
-      })),
+      recruiters: data.recruiters.map(r => {
+        const e = getMonthEntry(r.months, curKey);
+        return {
+          ...r,
+          months: { ...r.months, [curKey]: { ...e, target: targets[r.id] ?? e.target } },
+        };
+      }),
       lastUpdated: new Date().toISOString(),
     };
     saveData(updated);
@@ -34,13 +40,58 @@ export function CommitmentsTab({ data, onUpdate }: Props) {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleStartNextMonth = () => {
+    const updated = startNextMonth(data);
+    saveData(updated);
+    onUpdate(updated);
+    setTargets(Object.fromEntries(updated.recruiters.map(r => [r.id, getMonthEntry(r.months, updated.settings.currentMonthKey).target])));
+    setMonthStarted(true);
+    setTimeout(() => setMonthStarted(false), 3000);
+  };
+
+  const upcoming = nextMonthKey(curKey);
+  const trackedMonths = [...data.settings.months].sort((a, b) => a.key.localeCompare(b.key));
+
   return (
     <div className="space-y-6">
+
+      {/* Month management */}
+      <Card className="border-indigo-200 bg-indigo-50/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">🗓️ Month Management</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Currently tracking <strong>{monthLabel(curKey)}</strong> as the active month. When the month closes out, start the next one —
+            recruiter targets carry forward automatically and all prior months stay archived for comparison.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {trackedMonths.map(m => (
+              <span
+                key={m.key}
+                className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
+                  m.key === curKey
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-slate-600 border-slate-200"
+                }`}
+              >
+                {monthLabel(m.key)}{m.key === curKey ? " · active" : ""}
+              </span>
+            ))}
+          </div>
+          <Button
+            onClick={handleStartNextMonth}
+            className={monthStarted ? "bg-green-600 hover:bg-green-700" : "bg-indigo-600 hover:bg-indigo-700"}
+          >
+            {monthStarted ? `✓ ${monthLabel(upcoming)} is now active!` : `Start Tracking ${monthLabel(upcoming)} →`}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Individual targets */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">🎯 June Starts Commitments</CardTitle>
+          <CardTitle className="text-sm">🎯 {monthLabel(curKey)} Starts Commitments</CardTitle>
           <p className="text-xs text-muted-foreground">Edit each recruiter's monthly starts target. Updates projections across all tabs.</p>
         </CardHeader>
         <CardContent>
@@ -62,7 +113,7 @@ export function CommitmentsTab({ data, onUpdate }: Props) {
                   <span className="text-xs text-slate-500">Target:</span>
                   <Input
                     type="number"
-                    value={targets[r.id] ?? r.juneTarget}
+                    value={targets[r.id] ?? getMonthEntry(r.months, curKey).target}
                     min={0}
                     onChange={e => setTargets(prev => ({ ...prev, [r.id]: parseInt(e.target.value) || 0 }))}
                     className="w-16 h-7 text-sm text-center"
