@@ -1,4 +1,4 @@
-import { TeamData } from "./types";
+import { TeamData, MonthEntry, TeamSettings } from "./types";
 
 const STORAGE_KEY = "ta-dashboard-v4";
 
@@ -27,25 +27,48 @@ export const defaultData: TeamData = {
     currentMonthKey: "2026-07",
     currentDay: 1,
     teamTarget: 260,
+    teamQualityTarget: 80,
   },
   recruiters: NAMES.map(p => ({
     id: p.id,
     name: p.name,
     months: {
-      "2026-04": { starts: p.aprilStarts, quality: p.aprilQuality, target: p.juneTarget },
-      "2026-05": { starts: p.mayStarts,   quality: p.mayQuality,   target: p.juneTarget },
-      "2026-06": { starts: p.juneStarts,  quality: p.juneQuality,  target: p.juneTarget },
-      "2026-07": { starts: 0,             quality: 0,              target: p.juneTarget },
+      "2026-04": { starts: p.aprilStarts, quality: p.aprilQuality, target: p.juneTarget, qualityTarget: 80 },
+      "2026-05": { starts: p.mayStarts,   quality: p.mayQuality,   target: p.juneTarget, qualityTarget: 80 },
+      "2026-06": { starts: p.juneStarts,  quality: p.juneQuality,  target: p.juneTarget, qualityTarget: 80 },
+      "2026-07": { starts: 0,             quality: 0,              target: p.juneTarget, qualityTarget: 80 },
     },
   })),
   lastUpdated: "2026-07-01",
 };
 
+/** Backfills fields that may be missing from data saved before a schema change,
+ *  so existing browsers' localStorage keeps working after an app update. */
+function normalize(data: TeamData): TeamData {
+  const settings = data.settings as TeamSettings & { teamQualityTarget?: number };
+  return {
+    ...data,
+    settings: {
+      ...settings,
+      teamQualityTarget: settings.teamQualityTarget ?? 80,
+    },
+    recruiters: data.recruiters.map(r => ({
+      ...r,
+      months: Object.fromEntries(
+        Object.entries(r.months).map(([key, entry]) => {
+          const e = entry as MonthEntry & { qualityTarget?: number };
+          return [key, { ...e, qualityTarget: e.qualityTarget ?? 80 }];
+        })
+      ),
+    })),
+  };
+}
+
 export function loadTeamData(): TeamData {
   if (typeof window === "undefined") return defaultData;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as TeamData;
+    if (stored) return normalize(JSON.parse(stored) as TeamData);
   } catch {}
   return defaultData;
 }

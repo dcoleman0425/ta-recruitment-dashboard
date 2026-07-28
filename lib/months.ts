@@ -39,12 +39,15 @@ export function prevMonthKey(key: string): string {
   return `${y}-${String(m).padStart(2, "0")}`;
 }
 
-export function emptyMonthEntry(target = 0): MonthEntry {
-  return { starts: 0, quality: 0, target };
+export function emptyMonthEntry(target = 0, qualityTarget = 80): MonthEntry {
+  return { starts: 0, quality: 0, target, qualityTarget };
 }
 
 export function getMonthEntry(months: Record<string, MonthEntry>, key: string): MonthEntry {
-  return months[key] ?? emptyMonthEntry();
+  const e = months[key] as (MonthEntry & { qualityTarget?: number }) | undefined;
+  if (!e) return emptyMonthEntry();
+  // Back-compat: older saved entries may not have qualityTarget yet.
+  return { ...e, qualityTarget: e.qualityTarget ?? 80 };
 }
 
 /** Closes out the current month and opens the next one, carrying targets forward. */
@@ -59,13 +62,13 @@ export function startNextMonth(data: TeamData): TeamData {
     : [...settings.months, { key: newKey, totalDays: daysInMonth(newKey) }];
 
   const updatedRecruiters = recruiters.map(r => {
-    const priorTarget = r.months[curKey]?.target ?? 0;
+    const priorEntry = getMonthEntry(r.months, curKey);
     const existing = r.months[newKey];
     return {
       ...r,
       months: {
         ...r.months,
-        [newKey]: existing ?? emptyMonthEntry(priorTarget),
+        [newKey]: existing ?? emptyMonthEntry(priorEntry.target, priorEntry.qualityTarget),
       },
     };
   });

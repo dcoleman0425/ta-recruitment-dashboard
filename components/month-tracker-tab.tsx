@@ -22,13 +22,19 @@ export function MonthTrackerTab({ data }: Props) {
     const payout = getProjectedPayout(proj, e.quality);
     const pct    = e.target > 0 ? Math.min(100, Math.round((e.starts / e.target) * 100)) : 0;
     const projPct = e.target > 0 ? Math.round((proj / e.target) * 100) : 0;
-    return { ...r, entry: e, proj, status, cfg, payout, pct, projPct };
+    const qualityMet = e.quality >= e.qualityTarget;
+    return { ...r, entry: e, proj, status, cfg, payout, pct, projPct, qualityMet };
   }).sort((a, b) => b.projPct - a.projPct);
 
   const teamTarget = settings.teamTarget;
+  const teamQualityTarget = settings.teamQualityTarget;
   const teamTD     = recruiters.reduce((s, r) => s + getMonthEntry(r.months, curKey).starts, 0);
   const teamProjTD = enriched.reduce((s, r) => s + r.proj, 0);
   const teamPct    = teamTarget > 0 ? Math.min(100, Math.round((teamTD / teamTarget) * 100)) : 0;
+  const teamAvgQuality = recruiters.length
+    ? recruiters.reduce((s, r) => s + getMonthEntry(r.months, curKey).quality, 0) / recruiters.length
+    : 0;
+  const teamQualityPct = teamQualityTarget > 0 ? Math.min(100, Math.round((teamAvgQuality / teamQualityTarget) * 100)) : 0;
 
   return (
     <div className="space-y-5">
@@ -57,31 +63,54 @@ export function MonthTrackerTab({ data }: Props) {
         </CardContent>
       </Card>
 
-      {/* Team progress bar */}
-      <Card>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <p className="font-semibold text-slate-800">Team {monthLabel(curKey)} Target Progress</p>
-              <p className="text-xs text-muted-foreground">{teamTD} starts TD · Proj. {teamProjTD} EOM · Target {teamTarget}</p>
+      {/* Team progress bars */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="font-semibold text-slate-800">Team {monthLabel(curKey)} Starts Progress</p>
+                <p className="text-xs text-muted-foreground">{teamTD} starts TD · Proj. {teamProjTD} EOM · Target {teamTarget}</p>
+              </div>
+              <span className={`text-2xl font-bold ${teamProjTD >= teamTarget ? "text-emerald-600" : "text-red-600"}`}>
+                {teamTarget > 0 ? Math.round((teamProjTD / teamTarget) * 100) : 0}%
+              </span>
             </div>
-            <span className={`text-2xl font-bold ${teamProjTD >= teamTarget ? "text-emerald-600" : "text-red-600"}`}>
-              {teamTarget > 0 ? Math.round((teamProjTD / teamTarget) * 100) : 0}%
-            </span>
-          </div>
-          <Progress value={teamPct} className="h-3" />
-          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-            <span>0</span>
-            <span>{teamTarget / 2}</span>
-            <span>{teamTarget}</span>
-          </div>
-        </CardContent>
-      </Card>
+            <Progress value={teamPct} className="h-3" />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>0</span>
+              <span>{teamTarget / 2}</span>
+              <span>{teamTarget}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="font-semibold text-slate-800">Team {monthLabel(curKey)} Quality Progress</p>
+                <p className="text-xs text-muted-foreground">Avg {teamAvgQuality.toFixed(1)}% · Target {teamQualityTarget}%</p>
+              </div>
+              <span className={`text-2xl font-bold ${teamAvgQuality >= teamQualityTarget ? "text-emerald-600" : "text-red-600"}`}>
+                {teamQualityPct}%
+              </span>
+            </div>
+            <Progress value={teamQualityPct} className="h-3" />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>0</span>
+              <span>{(teamQualityTarget / 2).toFixed(0)}%</span>
+              <span>{teamQualityTarget}%</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Individual progress bars */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {enriched.map(r => {
           const barValue = Math.min(100, r.pct);
+          const qualityBarValue = r.entry.qualityTarget > 0 ? Math.min(100, Math.round((r.entry.quality / r.entry.qualityTarget) * 100)) : 0;
           return (
             <Card key={r.id} className={`border-l-4 ${
               r.status === "crushing"   ? "border-l-emerald-500" :
@@ -116,9 +145,20 @@ export function MonthTrackerTab({ data }: Props) {
                   <Progress value={barValue} className="h-2" />
                 </div>
 
-                {/* Quality indicator */}
+                {/* Quality bar (vs. this recruiter's quality target) */}
+                <div className="space-y-1 mt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Hire Quality vs. Target</span>
+                    <span>{r.entry.quality.toFixed(1)}% / {r.entry.qualityTarget}%</span>
+                  </div>
+                  <Progress value={qualityBarValue} className="h-2" />
+                </div>
+
+                {/* Quality indicator (bonus tier) */}
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Hire Quality</span>
+                  <span className={`text-muted-foreground ${r.qualityMet ? "" : "font-medium text-red-600"}`}>
+                    {r.qualityMet ? "✅ Meeting quality target" : "⚠️ Below quality target"}
+                  </span>
                   <span className={`font-semibold ${r.entry.quality >= 80 ? "text-emerald-600" : r.entry.quality >= 75 ? "text-amber-600" : "text-red-600"}`}>
                     {r.entry.quality >= 80 ? "🟢" : r.entry.quality >= 75 ? "🟡" : "🔴"} {r.entry.quality.toFixed(1)}%
                     {r.entry.quality < 75 && " — no quality bonus!"}

@@ -17,19 +17,30 @@ export function CommitmentsTab({ data, onUpdate }: Props) {
   const [targets, setTargets] = useState<Record<string, number>>(
     Object.fromEntries(data.recruiters.map(r => [r.id, getMonthEntry(r.months, curKey).target]))
   );
+  const [qualityTargets, setQualityTargets] = useState<Record<string, number>>(
+    Object.fromEntries(data.recruiters.map(r => [r.id, getMonthEntry(r.months, curKey).qualityTarget]))
+  );
   const [teamTarget, setTeamTarget] = useState(data.settings.teamTarget);
+  const [teamQualityTarget, setTeamQualityTarget] = useState(data.settings.teamQualityTarget);
   const [saved, setSaved] = useState(false);
   const [monthStarted, setMonthStarted] = useState(false);
 
   const handleSave = () => {
     const updated: TeamData = {
       ...data,
-      settings: { ...data.settings, teamTarget },
+      settings: { ...data.settings, teamTarget, teamQualityTarget },
       recruiters: data.recruiters.map(r => {
         const e = getMonthEntry(r.months, curKey);
         return {
           ...r,
-          months: { ...r.months, [curKey]: { ...e, target: targets[r.id] ?? e.target } },
+          months: {
+            ...r.months,
+            [curKey]: {
+              ...e,
+              target: targets[r.id] ?? e.target,
+              qualityTarget: qualityTargets[r.id] ?? e.qualityTarget,
+            },
+          },
         };
       }),
       lastUpdated: new Date().toISOString(),
@@ -44,7 +55,9 @@ export function CommitmentsTab({ data, onUpdate }: Props) {
     const updated = startNextMonth(data);
     saveData(updated);
     onUpdate(updated);
-    setTargets(Object.fromEntries(updated.recruiters.map(r => [r.id, getMonthEntry(r.months, updated.settings.currentMonthKey).target])));
+    const newKey = updated.settings.currentMonthKey;
+    setTargets(Object.fromEntries(updated.recruiters.map(r => [r.id, getMonthEntry(r.months, newKey).target])));
+    setQualityTargets(Object.fromEntries(updated.recruiters.map(r => [r.id, getMonthEntry(r.months, newKey).qualityTarget])));
     setMonthStarted(true);
     setTimeout(() => setMonthStarted(false), 3000);
   };
@@ -91,31 +104,60 @@ export function CommitmentsTab({ data, onUpdate }: Props) {
       {/* Individual targets */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">🎯 {monthLabel(curKey)} Starts Commitments</CardTitle>
-          <p className="text-xs text-muted-foreground">Edit each recruiter's monthly starts target. Updates projections across all tabs.</p>
+          <CardTitle className="text-sm">🎯 {monthLabel(curKey)} Starts &amp; Quality Commitments</CardTitle>
+          <p className="text-xs text-muted-foreground">Edit each recruiter's monthly starts target and hire quality % target. Updates projections and progress across all tabs.</p>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
-            <span className="text-sm font-semibold text-slate-700 w-40">Team Total Target</span>
-            <Input
-              type="number"
-              value={teamTarget}
-              min={0}
-              onChange={e => setTeamTarget(parseInt(e.target.value) || 0)}
-              className="w-24 h-8 text-sm"
-            />
+          <div className="flex flex-wrap items-center gap-6 mb-4 pb-3 border-b border-slate-200">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-slate-700">Team Total Target (Starts)</span>
+              <Input
+                type="number"
+                value={teamTarget}
+                min={0}
+                onChange={e => setTeamTarget(parseInt(e.target.value) || 0)}
+                className="w-24 h-8 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-slate-700">Team Hire Quality Target</span>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  value={teamQualityTarget}
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  onChange={e => setTeamQualityTarget(parseFloat(e.target.value) || 0)}
+                  className="w-20 h-8 text-sm"
+                />
+                <span className="text-sm text-slate-500">%</span>
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {data.recruiters.map(r => (
-              <div key={r.id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
-                <span className="text-sm font-medium text-slate-800 flex-1">{r.name}</span>
+              <div key={r.id} className="flex flex-wrap items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-sm font-medium text-slate-800 flex-1 min-w-[110px]">{r.name}</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500">Target:</span>
+                  <span className="text-xs text-slate-500">Starts:</span>
                   <Input
                     type="number"
                     value={targets[r.id] ?? getMonthEntry(r.months, curKey).target}
                     min={0}
                     onChange={e => setTargets(prev => ({ ...prev, [r.id]: parseInt(e.target.value) || 0 }))}
+                    className="w-16 h-7 text-sm text-center"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500">Quality %:</span>
+                  <Input
+                    type="number"
+                    value={qualityTargets[r.id] ?? getMonthEntry(r.months, curKey).qualityTarget}
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    onChange={e => setQualityTargets(prev => ({ ...prev, [r.id]: parseFloat(e.target.value) || 0 }))}
                     className="w-16 h-7 text-sm text-center"
                   />
                 </div>
